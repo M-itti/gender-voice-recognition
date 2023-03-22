@@ -1,26 +1,30 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 import pandas as pd
 
+
 # Load data into a pandas DataFrame
-data = pd.read_csv('data/voice.csv')
+data = pd.read_csv('data/voice.csv', sep=',')
 
 # Split data into features (X) and labels (y)
-X = data.iloc[:, :-1].values
-y = data.iloc[:, -1].values
+X = data.iloc[:, :-1].values.astype('float32')  # convert input data to float32
+y = data.iloc[:, -1].values.astype('int64')    # convert output labels to int64
 
-# Split data into train and test sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Split data into train, validation, and test sets
+X_trainval, X_test, y_trainval, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.2, random_state=42)
 
-# Define PyTorch DataLoader
-train_data = list(zip(torch.FloatTensor(X_train), torch.LongTensor(y_train)))
-test_data = list(zip(torch.FloatTensor(X_test), torch.LongTensor(y_test)))
+# Define PyTorch Datasets and DataLoaders
+train_set = TensorDataset(torch.from_numpy(X_train), torch.from_numpy(y_train))
+val_set = TensorDataset(torch.from_numpy(X_val), torch.from_numpy(y_val))
+test_set = TensorDataset(torch.from_numpy(X_test), torch.from_numpy(y_test))
 batch_size = 32
-train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
+test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
 # Define the model
 class Net(nn.Module):
@@ -44,12 +48,14 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Train the model
 num_epochs = 25
+best_val_acc = 0
 
 for epoch in range(num_epochs):
     train_loss = 0.0
     train_acc = 0.0
     
-    for batch_idx, (data, target) in enumerate(train_loader):
+    # Train loop
+    for data, target in train_loader:
         optimizer.zero_grad()
         outputs = model(data)
         loss = criterion(outputs, target)
@@ -63,39 +69,48 @@ for epoch in range(num_epochs):
     train_loss /= len(train_loader)
     train_acc = train_acc.float() / len(train_loader.dataset)
     
-    print('Epoch: {} \tTrain Loss: {:.6f} \tTrain Accuracy: {:.2f}'.format(
-            epoch+1, train_loss, (train_acc*100)))
-  
-# Test the model
+    # Validation loop
+    val_loss = 0.0
+    val_acc = 0.0
+    
+    with torch.no_grad():
+        for data, target in val_loader:
+            outputs = model(data)
+            loss = criterion(outputs, target)
+            
+            val_loss += loss.item()
+            _, preds = torch.max(outputs, 1)
+            val_acc += torch.sum(preds == target)
+
+        val_loss /= len(val_loader)
+        val_acc = val_acc.float() / len(val_loader.dataset)
+
+    print(f"Epoch: {epoch+1}\t"
+          f"Train Loss: {train_loss:.6f}\t"
+          f"Train Accuracy: {train_acc*100:.2f}\t"
+          f"Validation Loss: {val_loss:.6f}\t"
+          f"Validation Accuracy: {val_acc*100:.2f}")
+        
+    if val_acc > best_val_acc:
+        best_val_acc = val_acc
+        best_model_state = model.state_dict()
+
+# Test the best model
+model.load_state_dict(best_model_state)
 test_loss = 0.0
 test_acc = 0.0
 
-for batch_idx, (data, target) in enumerate(test_loader):
-    outputs = model(data)
-    loss = criterion(outputs, target)
-    
-    test_loss += loss.item()
-    _, preds = torch.max(outputs, 1)
-    test_acc += torch.sum(preds == target)
+with torch.no_grad():
+    for data, target in test_loader:
+        outputs = model(data)
+        loss = criterion(outputs, target)
+        
+        test_loss += loss.item()
+        _, preds = torch.max(outputs, 1)
+        test_acc += torch.sum(preds == target)
 
 test_loss /= len(test_loader)
 test_acc = test_acc.float() / len(test_loader.dataset)
 
-print('Test Loss: {:.6f} \tTest Accuracy: {:.2f}'.format(test_loss, (test_acc*100)))
-
-
-# predicted labels for test data
-model.eval()
-with torch.no_grad():
-    y_pred = []
-    for data, _ in test_loader:
-        outputs = model(data)
-        _, preds = torch.max(outputs, 1)
-        y_pred.extend(preds.tolist())
-
-# Print predicted labels and voices for a number of test samples
-num_samples = 10
-for i in range(num_samples):
-    print('Predicted label: {} \tActual label: {} \tVoice: {}'.format(
-        y_pred[i], y_test[i], X_test[i]))
-
+print(f"Test Loss: {test_loss:.6f}\t"
+      f"Test Accuracy: {test_acc*100:.2f}") 
