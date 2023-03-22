@@ -6,14 +6,14 @@ from model import Net
 
 # Load the trained model
 model_path = 'voice_model.pth'
-model = Net()
+model = Net().device('cuda:0' if torch.cuda.is_available() else "cpu")
 model.load_state_dict(torch.load(model_path))
 
 # Define the audio preprocessing pipeline
 transform = Compose([
     torchaudio.transforms.Resample(44100, 8000),  # resample audio to same rate as training data
     lambda x: np.array(x[0]),  # convert audio tensor to numpy array
-    Resize(8000),              # resize audio to same length as training data
+    Resize(4000),              # resize audio to same length as training data
     lambda x: x.astype('float32'),  # convert audio to float32
     ToTensor(),                # convert audio to tensor
     Normalize(mean=[0.5], std=[0.5])  # normalize audio between -1 and 1
