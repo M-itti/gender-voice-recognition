@@ -2,6 +2,7 @@ import torch
 import torchaudio
 import numpy as np
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
+from torchvision.transforms.functional import to_pil_image
 from model import Net
 
 # Load the trained model
@@ -12,11 +13,13 @@ model.load_state_dict(torch.load(model_path))
 # Define the audio preprocessing pipeline
 transform = Compose([
     torchaudio.transforms.Resample(44100, 8000),  # resample audio to same rate as training data
-    lambda x: np.array(x[0]),  # convert audio tensor to numpy array
-    Resize(8000),              # resize audio to same length as training data
-    lambda x: x.astype('float32'),  # convert audio to float32
-    ToTensor(),                # convert audio to tensor
-    Normalize(mean=[0.5], std=[0.5])  # normalize audio between -1 and 1
+    lambda x: x.numpy().reshape(-1, 1),           # convert audio tensor to numpy matrix with single channel
+    lambda x: to_pil_image(x),                    # convert numpy matrix to PIL Image
+    Resize(8000),                                 # resize audio to same length as training data
+    lambda x: np.array(x),                          # convert PIL Image to numpy array
+    lambda x: x.astype('float32'),                # convert audio to float32
+    ToTensor(),                                   # convert audio to tensor
+    Normalize(mean=[0.5], std=[0.5])              # normalize audio between -1 and 1
 ])
 
 # Load the audio sample

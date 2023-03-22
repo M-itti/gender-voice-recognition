@@ -124,5 +124,5 @@ def test(best_model_state):
 if __name__ == "__main__":
     best_model_state = train()   
     test(best_model_state)
-    torch.save(model.state_dict(), 'model.pth')
+    torch.save(model.state_dict(), 'voice_model.pth')
 
