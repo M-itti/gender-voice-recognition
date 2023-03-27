@@ -1,0 +1,5 @@
+#!/bin/bash
+
+
+sox sample.wav -b 16 sample.wav
+

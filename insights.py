@@ -25,3 +25,5 @@ print(df.describe())
 
 # Print the number of missing values in each column
 print(df.isnull().sum())
+
+
